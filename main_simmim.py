@@ -128,8 +128,8 @@ def train_one_epoch(config, model, data_loader, optimizer, epoch, lr_scheduler):
     start = time.time()
     end = time.time()
     for idx, (img, mask, _) in enumerate(data_loader):
-        img = img.cuda(non_blocking=True)
-        mask = mask.cuda(non_blocking=True)
+        img = img.cuda(non_blocking=True)    # torch.Size([B, 3, 224, 224])
+        mask = mask.cuda(non_blocking=True)  # torch.Size([B, 14, 14])
 
         loss = model(img, mask)
 

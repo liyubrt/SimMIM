@@ -66,32 +66,32 @@ class VisionTransformerForSimMIM(VisionTransformer):
     def _trunc_normal_(self, tensor, mean=0., std=1.):
         trunc_normal_(tensor, mean=mean, std=std, a=-std, b=std)
 
-    def forward(self, x, mask):
-        x = self.patch_embed(x)
+    def forward(self, x, mask):  # torch.Size([4, 3, 224, 224]), torch.Size([4, 14, 14])
+        x = self.patch_embed(x)  # torch.Size([4, 196, 768])
 
         assert mask is not None
-        B, L, _ = x.shape
+        B, L, _ = x.shape  # torch.Size([4, 196, 768])
 
-        mask_token = self.mask_token.expand(B, L, -1)
-        w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
-        x = x * (1 - w) + mask_token * w
+        mask_token = self.mask_token.expand(B, L, -1)  # torch.Size([4, 196, 768])
+        w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)  # torch.Size([4, 196, 1])
+        x = x * (1 - w) + mask_token * w  # torch.Size([4, 196, 768])
 
-        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        x = torch.cat((cls_tokens, x), dim=1)
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks  # torch.Size([4, 1, 768])
+        x = torch.cat((cls_tokens, x), dim=1)  # torch.Size([4, 197, 768])
 
-        if self.pos_embed is not None:
+        if self.pos_embed is not None:  # None
             x = x + self.pos_embed
-        x = self.pos_drop(x)
+        x = self.pos_drop(x)  # torch.Size([4, 197, 768])
 
-        rel_pos_bias = self.rel_pos_bias() if self.rel_pos_bias is not None else None
-        for blk in self.blocks:
-            x = blk(x, rel_pos_bias=rel_pos_bias)
-        x = self.norm(x)
+        rel_pos_bias = self.rel_pos_bias() if self.rel_pos_bias is not None else None  # torch.Size([12, 197, 197])
+        for blk in self.blocks:  # len(self.blocks) = 12
+            x = blk(x, rel_pos_bias=rel_pos_bias)  # torch.Size([4, 197, 768]) unchanged
+        x = self.norm(x)  # torch.Size([4, 197, 768])
 
-        x = x[:, 1:]
-        B, L, C = x.shape
-        H = W = int(L ** 0.5)
-        x = x.permute(0, 2, 1).reshape(B, C, H, W)
+        x = x[:, 1:]  # torch.Size([4, 196, 768])
+        B, L, C = x.shape  # 4 196 768
+        H = W = int(L ** 0.5)  # 14 14
+        x = x.permute(0, 2, 1).reshape(B, C, H, W)  # torch.Size([4, 768, 14, 14])
         return x
 
 
@@ -111,11 +111,11 @@ class SimMIM(nn.Module):
         self.in_chans = self.encoder.in_chans
         self.patch_size = self.encoder.patch_size
 
-    def forward(self, x, mask):
-        z = self.encoder(x, mask)
-        x_rec = self.decoder(z)
+    def forward(self, x, mask):  # (torch.Size([4, 3, 224, 224]), torch.Size([4, 14, 14]))
+        z = self.encoder(x, mask)  # torch.Size([4, 768, 14, 14])
+        x_rec = self.decoder(z)  # torch.Size([4, 3, 224, 224])
 
-        mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
+        mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()  # torch.Size([4, 1, 224, 224])
         loss_recon = F.l1_loss(x, x_rec, reduction='none')
         loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
         return loss
